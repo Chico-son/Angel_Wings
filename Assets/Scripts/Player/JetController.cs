@@ -3,10 +3,15 @@ using UnityEngine;
 public class JetController : MonoBehaviour
 {
     [Header("Movement Settings")]
-    [SerializeField] private float forwardSpeed = 25f;
     [SerializeField] private float pitchSpeed = 60f;
     [SerializeField] private float yawSpeed = 45f;
     [SerializeField] private float rollSpeed = 90f;
+    [SerializeField] private float currentSpeed = 25f;
+    [SerializeField] private float minSpeed = 10f;
+    [SerializeField] private float maxSpeed = 100f;
+    [SerializeField] private float acceleration = 20f;
+
+
 
 
     private Rigidbody rb;
@@ -14,19 +19,43 @@ public class JetController : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+
+        if (rb == null)
+        {
+            Debug.LogError("JetController requires a Rigidbody.");
+        }
     }
 
     private void FixedUpdate()
     {
         MoveForward();
         RotateJet();
+        HandleThrottle();
 
     }
 
     private void MoveForward()
     {
-        Vector3 forwardMovement = transform.forward * forwardSpeed;
+        Vector3 forwardMovement = transform.forward * currentSpeed;
         rb.linearVelocity = forwardMovement;
+    }
+
+    private void HandleThrottle()
+    {
+        if (Input.GetKey(KeyCode.LeftShift))
+        {
+            currentSpeed += acceleration * Time.fixedDeltaTime;
+        }
+        if (Input.GetKey(KeyCode.LeftControl))
+        {
+            currentSpeed -= acceleration * Time.fixedDeltaTime;
+        }
+
+        currentSpeed = Mathf.Clamp(
+            currentSpeed,
+            minSpeed,
+            maxSpeed
+        );
     }
 
     private void RotateJet()
@@ -36,12 +65,12 @@ public class JetController : MonoBehaviour
 
        float rollInput = 0f;
 
-       if (yawInput.GetKey(KeyCode,Q))
+       if (Input.GetKey(KeyCode.Q))
         {
             rollInput = 1f;
         }
 
-        else if (yawInput.GetKey(KeyCode,E))
+        else if (Input.GetKey(KeyCode.E))
         {
             rollInput = -1f;
 
