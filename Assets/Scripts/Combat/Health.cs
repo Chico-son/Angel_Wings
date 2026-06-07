@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class Health : MonoBehavior
+public class Health : MonoBehaviour
 {
     [SerializeField] private float maxHealth = 100f;
     [SerializeField] private float currentHealth;
@@ -10,7 +10,15 @@ public class Health : MonoBehavior
         currentHealth = maxHealth;
     }
 
-    private void TakeDamage(float damage)
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.K))
+        {
+            TakeDamage(25f);
+        }
+    }
+
+    public void TakeDamage(float damage)
     {
         currentHealth -= damage;
 
