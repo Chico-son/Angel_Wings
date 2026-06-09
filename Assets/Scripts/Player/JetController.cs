@@ -2,40 +2,34 @@ using UnityEngine;
 
 public class JetController : MonoBehaviour
 {
-    [Header("Rotation Speeds")]
-    [SerializeField] private float pitchSpeed = 70f;
-    [SerializeField] private float manualYawSpeed = 15f;
-    [SerializeField] private float autoYawFactor = 30f;
-    [SerializeField] private float rollSpeed = 100f;
-
-    [Header("Velocity")]
-    [SerializeField] private float startSpeed = 40f;
-    [SerializeField] private float minSpeed = 15f;
+    [Header("Speed")]
+    [SerializeField] private float startSpeed = 50f;
+    [SerializeField] private float minSpeed = 20f;
     [SerializeField] private float maxSpeed = 120f;
-    [SerializeField] private float acceleration = 25f;
+    [SerializeField] private float acceleration = 20f;
 
-    [Header("Flight smoothing")]
-    [SerializeField] private float turnTightness = 6f;
-    [SerializeField] private float optimalTurnSpeed = 50f;
-    [SerializeField] private float minTurnMultiplier = 0.4f;
-    [SerializeField] private float inputSmoothing = 8f;
+    [Header("Turning")]
+    [SerializeField] private float turnSpeed = 60f;
+    [SerializeField] private float maxBankAngle = 60f;
+
+    [Header("References")]
+    [SerializeField] private ReticleController reticleController;
+
     private Rigidbody rb;
     private float currentSpeed;
-    private float smoothedPitch;
-    private float smoothedRoll;
-    private float smoothedYaw;
+    private float currentYaw;
+    private float currentPitch;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
-
-        if (rb == null)
-        {
-            Debug.LogError("JetController requires a Rigidbody.");
-        }
-        currentSpeed = startSpeed;
         rb.useGravity = false;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
+        currentSpeed = startSpeed;
+
+        Vector3 e = transform.eulerAngles;
+        currentYaw = e.y;
+        currentPitch = e.x;
     }
 
     private void FixedUpdate()
@@ -43,8 +37,8 @@ public class JetController : MonoBehaviour
         HandleThrottle();
         HandleRotation();
         HandleMovement();
-
     }
+
     private void HandleThrottle()
     {
         if (Input.GetKey(KeyCode.LeftShift))
@@ -52,58 +46,35 @@ public class JetController : MonoBehaviour
         if (Input.GetKey(KeyCode.LeftControl))
             currentSpeed -= acceleration * Time.fixedDeltaTime;
 
-        currentSpeed = Mathf.Clamp(
-            currentSpeed,
-            minSpeed,
-            maxSpeed
-        );
+        currentSpeed = Mathf.Clamp(currentSpeed, minSpeed, maxSpeed);
     }
 
     private void HandleRotation()
     {
-       float rawPitch = Input.GetAxis("Vertical");
-       float rawRoll = Input.GetAxis("Horizontal");
+        Vector2 reticle = reticleController.GetNormalizedOffset();
 
-       float rawYaw = 0f;
+        float horizontalInput = Mathf.Clamp(reticle.x, -1f, 1f);
+        float verticalInput = Mathf.Clamp(-reticle.y, -1f, 1f);
 
-        if (Input.GetKey(KeyCode.Q)) rawYaw = -1f;
-        if (Input.GetKey(KeyCode.E)) rawYaw = 1f;
+        currentYaw += horizontalInput * turnSpeed * Time.fixedDeltaTime;
 
-        smoothedPitch = Mathf.Lerp(smoothedPitch, rawPitch, inputSmoothing * Time.fixedDeltaTime);
-        smoothedPitch = Mathf.Lerp(smoothedRoll, rawRoll, inputSmoothing * Time.fixedDeltaTime);
-        smoothedPitch = Mathf.Lerp(smoothedYaw, rawYaw, inputSmoothing * Time.fixedDeltaTime);
+        currentPitch += verticalInput * turnSpeed * Time.fixedDeltaTime;
+        currentPitch = Mathf.Clamp(currentPitch, -80f, 80f);
 
-        float bankAngle = Vector3.Dot(transform.right, Vector3.down);
-        float autoYaw = bankAngle * autoYawFactor;
-        float totalYaw = autoYaw + (smoothedYaw * manualYawSpeed);
+        float bankAngle = -horizontalInput * maxBankAngle;
 
-        float turnMult = GetTurnMultiplier();
+        Quaternion targetRotation = Quaternion.Euler(currentPitch, currentYaw, bankAngle);
 
-        Vector3 rotationAmount = new Vector3(
-            smoothedPitch * pitchSpeed *turnMult,
-            totalYaw,
-            -smoothedRoll * rollSpeed * turnMult
-        ) *Time.fixedDeltaTime;
-
-        Quaternion deltaRotation = Quaternion.Euler(rotationAmount);
-        rb.MoveRotation(rb.rotation * deltaRotation);
+        rb.MoveRotation(Quaternion.RotateTowards(
+            rb.rotation,
+            targetRotation,
+            180f * Time.fixedDeltaTime
+        ));
     }
 
     private void HandleMovement()
     {
-        Vector3 desiredVelocity = transform.forward * currentSpeed;
-        rb.linearVelocity = Vector3.Lerp(
-            rb.linearVelocity,
-            desiredVelocity,
-            turnTightness * Time.fixedDeltaTime
-        );
-    }
-
-    private float GetTurnMultiplier()
-    {
-        float speedDifference = Mathf.Abs(currentSpeed - optimalTurnSpeed);
-        float normalizedDiff = Mathf.InverseLerp(0f, maxSpeed, speedDifference);
-        return Mathf.Lerp(1.0f, minTurnMultiplier, normalizedDiff);
+        rb.linearVelocity = transform.forward * currentSpeed;
     }
 
     public float CurrentSpeed => currentSpeed;
