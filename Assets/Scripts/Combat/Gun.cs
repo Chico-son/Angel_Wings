@@ -4,12 +4,17 @@ public class Gun : MonoBehaviour
 {
     [SerializeField] private float damage = 25f;
     [SerializeField] private float range = 500f;
+    [SerializeField] private float fireRate = 0.1f;
+    
+    private float nextFireTime;
 
     private void Update()
     {
-        //Left Mouse button
-        if (Input.GetMouseButtonDown(0))
+        if (Input.GetMouseButton(0) &&
+        Time.time >= nextFireTime)
         {
+            nextFireTime = Time.time + fireRate;
+
             Fire();
         }
     }
