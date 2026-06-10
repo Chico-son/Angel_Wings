@@ -2,74 +2,134 @@ using UnityEngine;
 
 public class JetController : MonoBehaviour
 {
-    [Header("Speed")]
-    [SerializeField] private float startSpeed = 50f;
+    [Header("Throttle")]
+    [SerializeField] private float throttleChangeRate = 30f;    // % per second
     [SerializeField] private float minSpeed = 20f;
     [SerializeField] private float maxSpeed = 120f;
-    [SerializeField] private float acceleration = 20f;
+    [SerializeField] private float thrustResponsiveness = 1f;   // Lower = heavier feel
 
     [Header("Turning")]
-    [SerializeField] private float turnSpeed = 60f;
-    [SerializeField] private float maxBankAngle = 60f;
+    [SerializeField] private float pitchSpeed = 40f;            // Degrees per second
+    [SerializeField] private float yawSpeed = 20f;              // Degrees per second
+    [SerializeField] private float rollSpeed = 90f;             // Degrees per second (Q/E)
+    [SerializeField] private float visualBankAngle = 30f;       // Cosmetic roll during yaw turns
+    [SerializeField] private float inputSmoothing = 3f;         // Lower = heavier input feel
+
+    [Header("Auto-Level")]
+    [SerializeField] private float autoLevelSpeed = 1.5f;       // How fast wings return to level
+
+    [Header("Gravity & Energy")]
+    [SerializeField] private float gravityInfluence = 20f;      // Speed loss/gain from climb/dive
 
     [Header("References")]
     [SerializeField] private ReticleController reticleController;
 
     private Rigidbody rb;
+    private float throttle = 50f;
     private float currentSpeed;
-    private float currentYaw;
-    private float currentPitch;
+
+    // Smoothed input values for heavier feel
+    private float smoothedPitch;
+    private float smoothedYaw;
+    private float smoothedRoll;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
         rb.useGravity = false;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
-        currentSpeed = startSpeed;
+        rb.linearDamping = 0f;
+        rb.angularDamping = 0f;
 
-        Vector3 e = transform.eulerAngles;
-        currentYaw = e.y;
-        currentPitch = e.x;
+        currentSpeed = Mathf.Lerp(minSpeed, maxSpeed, throttle / 100f);
     }
 
     private void FixedUpdate()
     {
-        HandleThrottle();
+        HandleThrottleInput();
+        HandleSpeed();
         HandleRotation();
         HandleMovement();
     }
 
-    private void HandleThrottle()
+    private void HandleThrottleInput()
     {
-        if (Input.GetKey(KeyCode.LeftShift))
-            currentSpeed += acceleration * Time.fixedDeltaTime;
-        if (Input.GetKey(KeyCode.LeftControl))
-            currentSpeed -= acceleration * Time.fixedDeltaTime;
+        if (Input.GetKey(KeyCode.W))
+            throttle += throttleChangeRate * Time.fixedDeltaTime;
+        if (Input.GetKey(KeyCode.S))
+            throttle -= throttleChangeRate * Time.fixedDeltaTime;
 
-        currentSpeed = Mathf.Clamp(currentSpeed, minSpeed, maxSpeed);
+        throttle = Mathf.Clamp(throttle, 0f, 100f);
+    }
+
+    private void HandleSpeed()
+    {
+        float targetSpeed = Mathf.Lerp(minSpeed, maxSpeed, throttle / 100f);
+
+        float pitchFactor = transform.forward.y;
+        float gravityEffect = -pitchFactor * gravityInfluence;
+        targetSpeed += gravityEffect;
+
+        currentSpeed = Mathf.Lerp(currentSpeed, targetSpeed, thrustResponsiveness * Time.fixedDeltaTime);
+        currentSpeed = Mathf.Max(currentSpeed, minSpeed * 0.5f);
     }
 
     private void HandleRotation()
     {
+
         Vector2 reticle = reticleController.GetNormalizedOffset();
+        float rawPitch = Mathf.Clamp(-reticle.y, -1f, 1f);
+        float rawYaw = Mathf.Clamp(reticle.x, -1f, 1f);
 
-        float horizontalInput = Mathf.Clamp(reticle.x, -1f, 1f);
-        float verticalInput = Mathf.Clamp(-reticle.y, -1f, 1f);
+        float rawRoll = 0f;
+        if (Input.GetKey(KeyCode.Q)) rawRoll = 1f;
+        if (Input.GetKey(KeyCode.E)) rawRoll = -1f;
 
-        currentYaw += horizontalInput * turnSpeed * Time.fixedDeltaTime;
+        smoothedPitch = Mathf.Lerp(smoothedPitch, rawPitch, inputSmoothing * Time.fixedDeltaTime);
+        smoothedYaw = Mathf.Lerp(smoothedYaw, rawYaw, inputSmoothing * Time.fixedDeltaTime);
+        smoothedRoll = Mathf.Lerp(smoothedRoll, rawRoll, inputSmoothing * Time.fixedDeltaTime);
 
-        currentPitch += verticalInput * turnSpeed * Time.fixedDeltaTime;
-        currentPitch = Mathf.Clamp(currentPitch, -80f, 80f);
+        float pitchAmount = smoothedPitch * pitchSpeed * Time.fixedDeltaTime;
+        float yawAmount = smoothedYaw * yawSpeed * Time.fixedDeltaTime;
+        float rollAmount = smoothedRoll * rollSpeed * Time.fixedDeltaTime;
 
-        float bankAngle = -horizontalInput * maxBankAngle;
+        Quaternion pitchRotation = Quaternion.AngleAxis(pitchAmount, transform.right);
+        Quaternion yawRotation = Quaternion.AngleAxis(yawAmount, Vector3.up);
 
-        Quaternion targetRotation = Quaternion.Euler(currentPitch, currentYaw, bankAngle);
+        Quaternion newRotation = yawRotation * pitchRotation * rb.rotation;
 
-        rb.MoveRotation(Quaternion.RotateTowards(
-            rb.rotation,
-            targetRotation,
-            180f * Time.fixedDeltaTime
-        ));
+        Quaternion rollRotation = Quaternion.AngleAxis(rollAmount, transform.forward);
+        newRotation = rollRotation * newRotation;
+
+        bool notRolling = Mathf.Abs(rawRoll) < 0.01f;
+        bool mostlyUpright = IsMostlyUpright(newRotation);
+
+        if (notRolling && mostlyUpright)
+        {
+            newRotation = ApplyAutoLevel(newRotation);
+        }
+
+        if (mostlyUpright)
+        {
+            Quaternion bankRotation = Quaternion.AngleAxis(-smoothedYaw * visualBankAngle, transform.forward);
+            newRotation = Quaternion.Slerp(newRotation, bankRotation * newRotation, 0.05f);
+        }
+
+        rb.MoveRotation(newRotation);
+    }
+
+    private bool IsMostlyUpright(Quaternion rotation)
+    {
+
+        Vector3 planeUp = rotation * Vector3.up;
+        return Vector3.Dot(planeUp, Vector3.up) > 0.3f;
+    }
+
+    private Quaternion ApplyAutoLevel(Quaternion currentRotation)
+    {
+        Vector3 forward = currentRotation * Vector3.forward;
+        Quaternion levelRotation = Quaternion.LookRotation(forward, Vector3.up);
+        return Quaternion.Slerp(currentRotation, levelRotation, autoLevelSpeed * Time.fixedDeltaTime);
     }
 
     private void HandleMovement()
@@ -80,4 +140,5 @@ public class JetController : MonoBehaviour
     public float CurrentSpeed => currentSpeed;
     public float MaxSpeed => maxSpeed;
     public float MinSpeed => minSpeed;
+    public float Throttle => throttle;
 }
