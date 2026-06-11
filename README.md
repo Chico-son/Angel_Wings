@@ -17,7 +17,7 @@ I love working with game engines and air-combat games.
 The game is inspired by War Thunder.
 
 ---
-<img width="725" height="406" alt="image" src="https://github.com/user-attachments/assets/13babab3-0344-4cec-ada7-fa2b27966fad" />
+<img width="1920" height="1080" alt="bohmerang-finalbetter" src="https://github.com/user-attachments/assets/39a84096-0f00-4388-912e-b40c62ee6dbd" />
 
 ## Planned Features
 
@@ -100,7 +100,7 @@ Assets/
 
 ---
 
-<img width="725" height="406" alt="image" src="https://github.com/user-attachments/assets/95426a7d-0fd9-4d1a-9ee1-6205aa0b32d1" />
+<img width="725" height="406" alt="image" src="https://github.com/user-attachments/assets/13babab3-0344-4cec-ada7-fa2b27966fad" />
 
 
 ## Future Improvements
